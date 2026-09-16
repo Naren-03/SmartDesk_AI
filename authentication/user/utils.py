@@ -2,12 +2,13 @@ from datetime import datetime, timedelta,timezone
 import jwt
 from pwdlib import PasswordHash
 from typing import Any
+import os
 
 
 
-SECRET_KEY = "60cd960b3d4dab8f3ec8842d133c58227d923768fe98b19c76fe99c401a998ac"
-ALGORITHM = "HS256"
-TOKEN_EXPIRE_MINUTES = 30
+SECRET_KEY =  os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES",30))
 
 password_hasher = PasswordHash.recommended()
 
