@@ -1,7 +1,23 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from core.config import settings
 from routes.api.v1.users import router as user_router
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    client = AsyncIOMotorClient(settings.mongo_uri)
+    app.state.mongo_client = client
+    app.state.db = client[settings.mongo_db]
+    await app.state.db.users.create_index("email", unique=True)
+    yield
+    client.close()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 

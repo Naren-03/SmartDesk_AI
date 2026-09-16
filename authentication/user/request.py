@@ -1,22 +1,17 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
 
 class UserRequest(BaseModel):
-    username: str
-    email: str
-    password: str
-    role : Optional[str] = "user"
-
-class AdminUserRequest(UserRequest):
-    role: str = "superuser"
+    username: str = Field(min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
 
 class UserUpdateRequest(BaseModel):
-    username: str | None = None
-    email: str | None = None
-    password: str | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=50)
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
 
 class UserLoginRequest(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
 
 
