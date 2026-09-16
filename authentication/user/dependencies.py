@@ -8,7 +8,10 @@ from authentication.user.utils import decode_access_token
 from db.session import get_db
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/users/token",
+    description="Enter your account email address in the Username field.",
+)
 
 
 async def get_current_user(
@@ -46,3 +49,15 @@ def require_role(role: str):
         return current_user
 
     return role_dependency
+
+
+async def get_current_superuser(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    role = current_user.get("role")
+    if role != "superuser":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Superuser privileges required; current role is {role!r}",
+        )
+    return current_user
