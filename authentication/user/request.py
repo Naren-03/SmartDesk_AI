@@ -13,7 +13,3 @@ class UserUpdateRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
-
-
-class AdminUserRequest(UserRequest):
-    pass

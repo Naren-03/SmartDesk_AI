@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from authentication.user.dependencies import get_current_superuser, get_current_user
-from authentication.user.request import AdminUserRequest, UserLoginRequest, UserRequest
+from authentication.user.request import  UserLoginRequest, UserRequest
 from authentication.user.response import UserLoginResponse, UserResponse
 from authentication.user.utils import create_access_token, get_password_hash, verify_password
 from db.session import get_db
@@ -80,7 +80,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
 
 @router.post("/admin/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_admin_user(
-    user_request: AdminUserRequest,
+    user_request: UserRequest,
     current_user: dict = Depends(get_current_superuser),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
