@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     env:
       SECRET_KEY: "0123456789abcdef0123456789abcdef"
 
@@ -20,8 +20,18 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        
         with:
           python-version: "3.13"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff Linter
+        run: ruff check . --output-format=github
+
+      - name: Check Ruff Formatting
+        run: ruff format --check .
 
       - name: Install UV
         run: pip install uv

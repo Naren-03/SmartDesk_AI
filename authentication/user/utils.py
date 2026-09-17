@@ -17,10 +17,12 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict[str, Any]) -> str:
     now = datetime.now(timezone.utc)
     to_encode = data.copy()
-    to_encode.update({
-        "exp": now + timedelta(minutes=settings.token_expire_minutes),
-        "iat": now,
-    })
+    to_encode.update(
+        {
+            "exp": now + timedelta(minutes=settings.token_expire_minutes),
+            "iat": now,
+        }
+    )
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 

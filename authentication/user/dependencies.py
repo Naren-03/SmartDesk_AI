@@ -45,7 +45,9 @@ def require_role(role: str):
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
         if current_user.get("role") != role:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
         return current_user
 
     return role_dependency

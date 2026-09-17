@@ -6,9 +6,13 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from authentication.user.dependencies import get_current_superuser, get_current_user
-from authentication.user.request import  UserLoginRequest, UserRequest
+from authentication.user.request import UserLoginRequest, UserRequest
 from authentication.user.response import UserLoginResponse, UserResponse
-from authentication.user.utils import create_access_token, get_password_hash, verify_password
+from authentication.user.utils import (
+    create_access_token,
+    get_password_hash,
+    verify_password,
+)
 from db.session import get_db
 
 
@@ -23,7 +27,9 @@ def to_user_response(user: dict) -> UserResponse:
     )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 async def register_user(
     user_request: UserRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -40,7 +46,9 @@ async def register_user(
     try:
         await db.users.insert_one(user)
     except DuplicateKeyError as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered") from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        ) from error
 
     return to_user_response(user)
 
@@ -52,8 +60,12 @@ async def login_user(
 ):
     email = str(user_login_request.email).strip().lower()
     user = await db.users.find_one({"email": email})
-    if user is None or not verify_password(user_login_request.password, user["hashed_password"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if user is None or not verify_password(
+        user_login_request.password, user["hashed_password"]
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
 
     access_token = create_access_token(data={"sub": user["email"]})
     return UserLoginResponse(access_token=access_token)
@@ -67,7 +79,9 @@ async def token_login(
     email = form_data.username.strip().lower()
     user = await db.users.find_one({"email": email})
     if user is None or not verify_password(form_data.password, user["hashed_password"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
 
     access_token = create_access_token(data={"sub": user["email"]})
     return UserLoginResponse(access_token=access_token)
@@ -78,7 +92,11 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
     return to_user_response(current_user)
 
 
-@router.post("/admin/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/admin/users/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_admin_user(
     user_request: UserRequest,
     current_user: dict = Depends(get_current_superuser),
@@ -96,6 +114,8 @@ async def create_admin_user(
     try:
         await db.users.insert_one(user)
     except DuplicateKeyError as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered") from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        ) from error
 
     return to_user_response(user)
