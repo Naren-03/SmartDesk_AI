@@ -9,6 +9,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    
+    env:
+      SECRET_KEY: "0123456789abcdef0123456789abcdef"
+
 
     steps:
       - name: Checkout code
