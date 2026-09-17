@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
 from pwdlib import PasswordHash
 
 from core.config import settings
-
 
 password_hasher = PasswordHash.recommended()
 
@@ -15,7 +14,7 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict[str, Any]) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     to_encode = data.copy()
     to_encode.update(
         {

@@ -7,7 +7,6 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from authentication.user.utils import decode_access_token
 from db.session import get_db
 
-
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/users/token",
     description="Enter your account email address in the Username field.",

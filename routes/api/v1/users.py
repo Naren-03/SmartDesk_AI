@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -14,7 +14,6 @@ from authentication.user.utils import (
     verify_password,
 )
 from db.session import get_db
-
 
 router = APIRouter()
 
@@ -40,7 +39,7 @@ async def register_user(
         "username": user_request.username.strip(),
         "hashed_password": get_password_hash(user_request.password),
         "role": "user",
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
 
     try:
@@ -108,7 +107,7 @@ async def create_admin_user(
         "username": user_request.username.strip(),
         "hashed_password": get_password_hash(user_request.password),
         "role": "superuser",
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
 
     try:

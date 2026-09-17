@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 
 from authentication.user.request import UserRequest
-
 from authentication.user.utils import create_access_token, decode_access_token
 
 
