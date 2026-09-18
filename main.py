@@ -20,12 +20,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-
-
 app.include_router(user_router, prefix="/api/v1/users", tags=["users"])
+
 
 @app.get("/safe")
 def safe_endpoint():
     return {"message": "This is a safe endpoint."}
-
-
