@@ -64,7 +64,9 @@ def register_payload(email="alice@example.com"):
 
 
 def test_register_persists_user_in_mongodb(client, database):
-    response = client.post("/api/v1/users/register", json=register_payload("Alice@Example.com"))
+    response = client.post(
+        "/api/v1/users/register", json=register_payload("Alice@Example.com")
+    )
 
     assert response.status_code == 201
     assert response.json() == {
