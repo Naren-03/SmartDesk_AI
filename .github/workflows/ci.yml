@@ -33,24 +33,19 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
-        
         with:
-          python-version: "3.13"
-
-      - name: Install Ruff
-        run: pip install ruff
-
-      - name: Run Ruff Linter
-        run: ruff check . --output-format=github
-
-      - name: Check Ruff Formatting
-        run: ruff format --check .
-
+          python-version-file: .python-version
       - name: Install UV
         run: pip install uv
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Run Ruff Linter
+        run: uv run ruff check . --output-format=github
+
+      - name: Check Ruff Formatting
+        run: uv run ruff format --check .
 
       - name: Run tests
         run: uv run pytest

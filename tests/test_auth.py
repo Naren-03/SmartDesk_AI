@@ -91,6 +91,35 @@ def test_register_rejects_duplicate_email(client, database):
     assert duplicate_response.status_code == 409
 
 
+def test_login_rejects_invalid_credentials(client, database):
+    client.post("/api/v1/users/register", json=register_payload())
+
+    response = client.post(
+        "/api/v1/users/login",
+        json={"email": "alice@example.com", "password": "wrong-password"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password"
+
+
+def test_me_rejects_invalid_jwt(client, database):
+    response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": "Bearer not-a-valid-jwt"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
+
+
+def test_me_requires_authorization_header(client, database):
+    response = client.get("/api/v1/users/me")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
+
+
 def test_login_and_me_use_persisted_user(client, database):
     client.post("/api/v1/users/register", json=register_payload())
 
