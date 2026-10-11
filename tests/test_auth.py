@@ -187,3 +187,68 @@ def test_normal_user_cannot_create_admin(client, database):
     )
 
     assert response.status_code == 403
+
+
+def test_me_can_update_profile(client, database):
+    client.post("/api/v1/users/register", json=register_payload())
+    login_response = client.post(
+        "/api/v1/users/login",
+        json={"email": "alice@example.com", "password": "password123"},
+    )
+
+    response = client.patch(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+        json={
+            "username": "Alice Updated",
+            "email": "ALICE@EXAMPLE.com",
+            "password": "new-password-456",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "username": "Alice Updated",
+        "email": "alice@example.com",
+        "role": "user",
+    }
+
+    database_user = database.users.find_one({"email": "alice@example.com"})
+    assert database_user["username"] == "Alice Updated"
+    assert database_user["hashed_password"] != "new-password-456"
+
+
+def test_admin_can_list_users(client, database):
+    database.users.insert_many(
+        [
+            {
+                "username": "Admin",
+                "email": "admin@example.com",
+                "hashed_password": get_password_hash("admin-password"),
+                "role": "superuser",
+                "created_at": datetime.now(UTC),
+            },
+            {
+                "username": "Alice",
+                "email": "alice@example.com",
+                "hashed_password": get_password_hash("password123"),
+                "role": "user",
+                "created_at": datetime.now(UTC),
+            },
+        ]
+    )
+    login_response = client.post(
+        "/api/v1/users/login",
+        json={"email": "admin@example.com", "password": "admin-password"},
+    )
+
+    response = client.get(
+        "/api/v1/users/admin/users",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"username": "Admin", "email": "admin@example.com", "role": "superuser"},
+        {"username": "Alice", "email": "alice@example.com", "role": "user"},
+    ]
