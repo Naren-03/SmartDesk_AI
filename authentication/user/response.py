@@ -14,3 +14,7 @@ class UserResponse(BaseModel):
     username: str
     email: str
     role: str
+
+
+class AdminUserResponse(UserResponse):
+    id: str
