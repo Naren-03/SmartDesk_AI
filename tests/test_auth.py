@@ -344,7 +344,9 @@ def test_admin_can_get_update_and_delete_user(client, database):
     )
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
 
-    get_response = client.get(f"/api/v1/users/admin/users/{alice['_id']}", headers=headers)
+    get_response = client.get(
+        f"/api/v1/users/admin/users/{alice['_id']}", headers=headers
+    )
     update_response = client.patch(
         f"/api/v1/users/admin/users/{alice['_id']}",
         headers=headers,
