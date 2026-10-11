@@ -1,14 +1,19 @@
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from authentication.user.dependencies import get_current_superuser, get_current_user
+from authentication.user.models import UserRole
 from authentication.user.request import UserLoginRequest, UserRequest, UserUpdateRequest
-from authentication.user.response import UserLoginResponse, UserResponse
+from authentication.user.response import (
+    AdminUserResponse,
+    UserLoginResponse,
+    UserResponse,
+)
 from authentication.user.utils import (
     create_access_token,
     get_password_hash,
@@ -21,6 +26,15 @@ router = APIRouter()
 
 def to_user_response(user: dict) -> UserResponse:
     return UserResponse(
+        username=user["username"],
+        email=user["email"],
+        role=user["role"],
+    )
+
+
+def to_admin_user_response(user: dict) -> AdminUserResponse:
+    return AdminUserResponse(
+        id=str(user["_id"]),
         username=user["username"],
         email=user["email"],
         role=user["role"],
@@ -167,18 +181,22 @@ async def delete_profile(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/admin/users", response_model=list[UserResponse], tags=["Admin Users"])
+@router.get(
+    "/admin/users", response_model=list[AdminUserResponse], tags=["Admin Users"]
+)
 async def list_users(
+    role: UserRole | None = Query(default=None),
     current_user: dict = Depends(get_current_superuser),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    users = await db.users.find({}).sort("username", 1).to_list(length=None)
-    return [to_user_response(user) for user in users]
+    query = {"role": role.value} if role is not None else {}
+    users = await db.users.find(query).sort("username", 1).to_list(length=None)
+    return [to_admin_user_response(user) for user in users]
 
 
 @router.get(
     "/admin/users/{user_id}",
-    response_model=UserResponse,
+    response_model=AdminUserResponse,
     tags=["Admin Users"],
 )
 async def get_user_by_id(
@@ -187,12 +205,12 @@ async def get_user_by_id(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     user = await get_user_or_404(db, user_id)
-    return to_user_response(user)
+    return to_admin_user_response(user)
 
 
 @router.patch(
     "/admin/users/{user_id}",
-    response_model=UserResponse,
+    response_model=AdminUserResponse,
     tags=["Admin Users"],
 )
 async def update_user_by_id(
@@ -203,7 +221,7 @@ async def update_user_by_id(
 ):
     user = await get_user_or_404(db, user_id)
     updated_user = await apply_user_update(db, user, user_update)
-    return to_user_response(updated_user)
+    return to_admin_user_response(updated_user)
 
 
 @router.delete(
