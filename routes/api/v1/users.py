@@ -9,7 +9,12 @@ from pymongo.errors import DuplicateKeyError
 
 from authentication.user.dependencies import get_current_superuser, get_current_user
 from authentication.user.models import UserRole
-from authentication.user.request import UserLoginRequest, UserRequest, UserUpdateRequest
+from authentication.user.request import (
+    AdminUserUpdateRequest,
+    UserLoginRequest,
+    UserRequest,
+    UserUpdateRequest,
+)
 from authentication.user.response import (
     AdminUserListResponse,
     AdminUserResponse,
@@ -32,6 +37,7 @@ def to_user_response(user: dict) -> UserResponse:
         username=user["username"],
         email=user["email"],
         role=user["role"],
+        is_active=user.get("is_active", True),
     )
 
 
@@ -41,6 +47,7 @@ def to_admin_user_response(user: dict) -> AdminUserResponse:
         username=user["username"],
         email=user["email"],
         role=user["role"],
+        is_active=user.get("is_active", True),
     )
 
 
@@ -63,9 +70,9 @@ async def get_user_or_404(db: AsyncIOMotorDatabase, user_id: str) -> dict:
 async def apply_user_update(
     db: AsyncIOMotorDatabase,
     current_user: dict,
-    user_update: UserUpdateRequest,
+    user_update: UserUpdateRequest | AdminUserUpdateRequest,
 ) -> dict:
-    update_data: dict[str, str] = {}
+    update_data: dict[str, object] = {}
 
     if user_update.username is not None:
         update_data["username"] = user_update.username.strip()
@@ -82,6 +89,11 @@ async def apply_user_update(
         update_data["email"] = email
     if user_update.password is not None:
         update_data["hashed_password"] = get_password_hash(user_update.password)
+    if (
+        isinstance(user_update, AdminUserUpdateRequest)
+        and user_update.is_active is not None
+    ):
+        update_data["is_active"] = user_update.is_active
 
     if not update_data:
         return current_user
@@ -106,6 +118,7 @@ async def register_user(
         "username": user_request.username.strip(),
         "hashed_password": get_password_hash(user_request.password),
         "role": "user",
+        "is_active": True,
         "created_at": datetime.now(UTC),
     }
 
@@ -126,8 +139,10 @@ async def login_user(
 ):
     email = str(user_login_request.email).strip().lower()
     user = await db.users.find_one({"email": email})
-    if user is None or not verify_password(
-        user_login_request.password, user["hashed_password"]
+    if (
+        user is None
+        or not user.get("is_active", True)
+        or not verify_password(user_login_request.password, user["hashed_password"])
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -150,7 +165,12 @@ async def token_login(
 ):
     email = form_data.username.strip().lower()
     user = await db.users.find_one({"email": email})
-    if user is None or not verify_password(form_data.password, user["hashed_password"]):
+
+    if (
+        user is None
+        or not user.get("is_active", True)
+        or not verify_password(form_data.password, user["hashed_password"])
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -239,11 +259,16 @@ async def get_user_by_id(
 )
 async def update_user_by_id(
     user_id: str,
-    user_update: UserUpdateRequest,
+    user_update: AdminUserUpdateRequest,
     current_user: dict = Depends(get_current_superuser),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     user = await get_user_or_404(db, user_id)
+    if user["_id"] == current_user["_id"] and user_update.is_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrators cannot deactivate their own account",
+        )
     updated_user = await apply_user_update(db, user, user_update)
     return to_admin_user_response(updated_user)
 
@@ -280,6 +305,7 @@ async def create_admin_user(
         "username": user_request.username.strip(),
         "hashed_password": get_password_hash(user_request.password),
         "role": "superuser",
+        "is_active": True,
         "created_at": datetime.now(UTC),
     }
 
