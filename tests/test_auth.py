@@ -104,7 +104,10 @@ def test_login_rejects_invalid_credentials(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+    }
 
 
 def test_login_rejects_unknown_email(client, database):
@@ -114,7 +117,10 @@ def test_login_rejects_unknown_email(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+    }
 
 
 def test_inactive_user_cannot_login(client, database):
@@ -140,8 +146,14 @@ def test_inactive_user_cannot_login(client, database):
 
     assert login_response.status_code == 401
     assert token_response.status_code == 401
-    assert login_response.json()["detail"] == "Invalid email or password"
-    assert token_response.json()["detail"] == "Invalid email or password"
+    assert login_response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+    }
+    assert token_response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+    }
 
 
 def test_me_rejects_invalid_jwt(client, database):
@@ -151,7 +163,10 @@ def test_me_rejects_invalid_jwt(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+    }
 
 
 def test_me_rejects_expired_jwt(client, database):
@@ -170,7 +185,10 @@ def test_me_rejects_expired_jwt(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+    }
 
 
 def test_inactive_user_cannot_use_existing_token(client, database):
@@ -192,14 +210,20 @@ def test_inactive_user_cannot_use_existing_token(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+    }
 
 
 def test_me_requires_authorization_header(client, database):
     response = client.get("/api/v1/users/me")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    assert response.json() == {
+        "code": "AUTHENTICATION_REQUIRED",
+        "message": "Not authenticated",
+    }
 
 
 def test_login_and_me_use_persisted_user(client, database):
@@ -283,7 +307,10 @@ def test_admin_route_requires_authentication(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    assert response.json() == {
+        "code": "AUTHENTICATION_REQUIRED",
+        "message": "Not authenticated",
+    }
 
 
 def test_me_can_update_profile(client, database):
