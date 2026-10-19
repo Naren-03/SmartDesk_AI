@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from pymongo import MongoClient
@@ -42,17 +42,19 @@ def database(monkeypatch):
         mongo_client.admin.command("ping")
 
     except ConnectionFailure:
-        raise HTTPException(status_code=500, detail="MongoDB server not available")
+        raise RuntimeError("MongoDB server not available")
     except ConfigurationError:
-        raise HTTPException(status_code=500, detail="MongoDB configuration error")
+        raise RuntimeError("MongoDB configuration error")
     except OperationFailure as e:
-        raise HTTPException(status_code=500, detail=f"MongoDB operation failed: {e}")
+        raise RuntimeError(f"MongoDB operation failed: {e}")
 
     database = mongo_client[settings.mongo_test_db]
-    database.users.delete_many({})
-    yield database
-    database.users.delete_many({})
-    mongo_client.close()
+    try:
+        database.users.delete_many({})
+        yield database
+    finally:
+        database.users.delete_many({})
+        mongo_client.close()
 
 
 def register_payload(email="alice@example.com"):
@@ -103,10 +105,39 @@ def test_login_rejects_invalid_credentials(client, database):
     assert response.json()["detail"] == "Invalid email or password"
 
 
+def test_login_rejects_unknown_email(client, database):
+    response = client.post(
+        "/api/v1/users/login",
+        json={"email": "unknown@example.com", "password": "password123"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password"
+
+
 def test_me_rejects_invalid_jwt(client, database):
     response = client.get(
         "/api/v1/users/me",
         headers={"Authorization": "Bearer not-a-valid-jwt"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
+
+
+def test_me_rejects_expired_jwt(client, database):
+    expired_token = jwt.encode(
+        {
+            "sub": "alice@example.com",
+            "exp": datetime.now(UTC) - timedelta(minutes=1),
+        },
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+
+    response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
     )
 
     assert response.status_code == 401
@@ -189,6 +220,20 @@ def test_normal_user_cannot_create_admin(client, database):
     assert response.status_code == 403
 
 
+def test_admin_route_requires_authentication(client, database):
+    response = client.post(
+        "/api/v1/users/admin/users/register",
+        json={
+            "username": "Second Admin",
+            "email": "second-admin@example.com",
+            "password": "admin-password-2",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
+
+
 def test_me_can_update_profile(client, database):
     client.post("/api/v1/users/register", json=register_payload())
     login_response = client.post(
@@ -248,7 +293,112 @@ def test_admin_can_list_users(client, database):
     )
 
     assert response.status_code == 200
-    assert response.json() == [
-        {"username": "Admin", "email": "admin@example.com", "role": "superuser"},
-        {"username": "Alice", "email": "alice@example.com", "role": "user"},
+    result = response.json()
+    users = result["items"]
+    assert result["total"] == 2
+    assert result["page"] == 1
+    assert result["page_size"] == 20
+    assert result["pages"] == 1
+    assert [user["username"] for user in users] == ["Admin", "Alice"]
+    assert all(user["id"] for user in users)
+    assert users[0]["email"] == "admin@example.com"
+    assert users[0]["role"] == "superuser"
+    assert users[1]["email"] == "alice@example.com"
+    assert users[1]["role"] == "user"
+
+    normal_users_response = client.get(
+        "/api/v1/users/admin/users?role=user",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+    superusers_response = client.get(
+        "/api/v1/users/admin/users?role=superuser",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert [user["email"] for user in normal_users_response.json()["items"]] == [
+        "alice@example.com"
     ]
+    assert [user["email"] for user in superusers_response.json()["items"]] == [
+        "admin@example.com"
+    ]
+
+    search_response = client.get(
+        "/api/v1/users/admin/users?search=ALICE",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert [user["email"] for user in search_response.json()["items"]] == [
+        "alice@example.com"
+    ]
+
+    second_page_response = client.get(
+        "/api/v1/users/admin/users?page=2&page_size=1",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert second_page_response.json()["page"] == 2
+    assert second_page_response.json()["pages"] == 2
+    assert [user["email"] for user in second_page_response.json()["items"]] == [
+        "alice@example.com"
+    ]
+
+
+def test_admin_can_get_update_and_delete_user(client, database):
+    database.users.insert_many(
+        [
+            {
+                "username": "Admin",
+                "email": "admin@example.com",
+                "hashed_password": get_password_hash("admin-password"),
+                "role": "superuser",
+                "created_at": datetime.now(UTC),
+            },
+            {
+                "username": "Alice",
+                "email": "alice@example.com",
+                "hashed_password": get_password_hash("password123"),
+                "role": "user",
+                "created_at": datetime.now(UTC),
+            },
+        ]
+    )
+    alice = database.users.find_one({"email": "alice@example.com"})
+    login_response = client.post(
+        "/api/v1/users/login",
+        json={"email": "admin@example.com", "password": "admin-password"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    get_response = client.get(
+        f"/api/v1/users/admin/users/{alice['_id']}", headers=headers
+    )
+    update_response = client.patch(
+        f"/api/v1/users/admin/users/{alice['_id']}",
+        headers=headers,
+        json={"username": "Alice Updated"},
+    )
+    delete_response = client.delete(
+        f"/api/v1/users/admin/users/{alice['_id']}", headers=headers
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == str(alice["_id"])
+    assert update_response.status_code == 200
+    assert update_response.json()["username"] == "Alice Updated"
+    assert delete_response.status_code == 204
+    assert database.users.find_one({"_id": alice["_id"]}) is None
+
+
+def test_normal_user_cannot_list_admin_users(client, database):
+    client.post("/api/v1/users/register", json=register_payload())
+    login_response = client.post(
+        "/api/v1/users/login",
+        json={"email": "alice@example.com", "password": "password123"},
+    )
+
+    response = client.get(
+        "/api/v1/users/admin/users",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert response.status_code == 403

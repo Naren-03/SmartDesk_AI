@@ -14,3 +14,15 @@ class UserResponse(BaseModel):
     username: str
     email: str
     role: str
+
+
+class AdminUserResponse(UserResponse):
+    id: str
+
+
+class AdminUserListResponse(BaseModel):
+    items: list[AdminUserResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int

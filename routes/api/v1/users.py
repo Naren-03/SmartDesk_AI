@@ -1,19 +1,27 @@
+import re
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from authentication.user.dependencies import get_current_superuser, get_current_user
+from authentication.user.models import UserRole
 from authentication.user.request import UserLoginRequest, UserRequest, UserUpdateRequest
-from authentication.user.response import UserLoginResponse, UserResponse
+from authentication.user.response import (
+    AdminUserListResponse,
+    AdminUserResponse,
+    UserLoginResponse,
+    UserResponse,
+)
 from authentication.user.utils import (
     create_access_token,
     get_password_hash,
     verify_password,
 )
+from core.pagination import Pagination
 from db.session import get_db
 
 router = APIRouter()
@@ -21,6 +29,15 @@ router = APIRouter()
 
 def to_user_response(user: dict) -> UserResponse:
     return UserResponse(
+        username=user["username"],
+        email=user["email"],
+        role=user["role"],
+    )
+
+
+def to_admin_user_response(user: dict) -> AdminUserResponse:
+    return AdminUserResponse(
+        id=str(user["_id"]),
         username=user["username"],
         email=user["email"],
         role=user["role"],
@@ -167,18 +184,43 @@ async def delete_profile(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/admin/users", response_model=list[UserResponse], tags=["Admin Users"])
+@router.get("/admin/users", response_model=AdminUserListResponse, tags=["Admin Users"])
 async def list_users(
+    pagination: Pagination,
+    role: UserRole | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1, max_length=100),
     current_user: dict = Depends(get_current_superuser),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    users = await db.users.find({}).sort("username", 1).to_list(length=None)
-    return [to_user_response(user) for user in users]
+    query = {"role": role.value} if role is not None else {}
+    if search is not None:
+        search_pattern = re.escape(search.strip())
+        query["$or"] = [
+            {"username": {"$regex": search_pattern, "$options": "i"}},
+            {"email": {"$regex": search_pattern, "$options": "i"}},
+        ]
+
+    total = await db.users.count_documents(query)
+    users = (
+        await db.users.find(query)
+        .sort("username", 1)
+        .skip(pagination.skip)
+        .limit(pagination.page_size)
+        .to_list(length=pagination.page_size)
+    )
+    pages = (total + pagination.page_size - 1) // pagination.page_size
+    return AdminUserListResponse(
+        items=[to_admin_user_response(user) for user in users],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        pages=pages,
+    )
 
 
 @router.get(
     "/admin/users/{user_id}",
-    response_model=UserResponse,
+    response_model=AdminUserResponse,
     tags=["Admin Users"],
 )
 async def get_user_by_id(
@@ -187,12 +229,12 @@ async def get_user_by_id(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     user = await get_user_or_404(db, user_id)
-    return to_user_response(user)
+    return to_admin_user_response(user)
 
 
 @router.patch(
     "/admin/users/{user_id}",
-    response_model=UserResponse,
+    response_model=AdminUserResponse,
     tags=["Admin Users"],
 )
 async def update_user_by_id(
@@ -203,7 +245,7 @@ async def update_user_by_id(
 ):
     user = await get_user_or_404(db, user_id)
     updated_user = await apply_user_update(db, user, user_update)
-    return to_user_response(updated_user)
+    return to_admin_user_response(updated_user)
 
 
 @router.delete(
