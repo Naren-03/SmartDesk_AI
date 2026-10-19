@@ -18,3 +18,11 @@ class UserResponse(BaseModel):
 
 class AdminUserResponse(UserResponse):
     id: str
+
+
+class AdminUserListResponse(BaseModel):
+    items: list[AdminUserResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int

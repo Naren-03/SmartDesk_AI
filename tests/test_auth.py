@@ -293,7 +293,12 @@ def test_admin_can_list_users(client, database):
     )
 
     assert response.status_code == 200
-    users = response.json()
+    result = response.json()
+    users = result["items"]
+    assert result["total"] == 2
+    assert result["page"] == 1
+    assert result["page_size"] == 20
+    assert result["pages"] == 1
     assert [user["username"] for user in users] == ["Admin", "Alice"]
     assert all(user["id"] for user in users)
     assert users[0]["email"] == "admin@example.com"
@@ -310,11 +315,31 @@ def test_admin_can_list_users(client, database):
         headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
     )
 
-    assert [user["email"] for user in normal_users_response.json()] == [
+    assert [user["email"] for user in normal_users_response.json()["items"]] == [
         "alice@example.com"
     ]
-    assert [user["email"] for user in superusers_response.json()] == [
+    assert [user["email"] for user in superusers_response.json()["items"]] == [
         "admin@example.com"
+    ]
+
+    search_response = client.get(
+        "/api/v1/users/admin/users?search=ALICE",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert [user["email"] for user in search_response.json()["items"]] == [
+        "alice@example.com"
+    ]
+
+    second_page_response = client.get(
+        "/api/v1/users/admin/users?page=2&page_size=1",
+        headers={"Authorization": f"Bearer {login_response.json()['access_token']}"},
+    )
+
+    assert second_page_response.json()["page"] == 2
+    assert second_page_response.json()["pages"] == 2
+    assert [user["email"] for user in second_page_response.json()["items"]] == [
+        "alice@example.com"
     ]
 
 
