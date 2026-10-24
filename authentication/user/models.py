@@ -16,4 +16,5 @@ class User(BaseModel):
     email: EmailStr
     hashed_password: str
     role: UserRole = UserRole.USER
+    is_active: bool = True
     created_at: datetime

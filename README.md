@@ -28,6 +28,23 @@ uv run uvicorn main:app --reload
 - `GET /api/v1/users/me` returns the authenticated user's profile.
 - `GET /docs` opens the interactive API documentation.
 
+### Error responses
+
+API errors use a consistent structure:
+
+```json
+{
+	"code": "INVALID_CREDENTIALS",
+	"message": "Invalid email or password",
+	"details": null
+}
+```
+
+Validation errors use `code: "VALIDATION_ERROR"` and include field-level
+information in `details`. Authentication deliberately uses the same generic
+credential message for an unknown email, an incorrect password, and an
+inactive account so the API does not reveal whether an account exists.
+
 Public registration cannot create a superuser. Create administrative users through a protected administrative workflow when that feature is added.
 
 ### Tests

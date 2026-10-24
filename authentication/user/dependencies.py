@@ -34,7 +34,7 @@ async def get_current_user(
         raise credentials_error from error
 
     user = await db.users.find_one({"email": email})
-    if user is None:
+    if user is None or not user.get("is_active", True):
         raise credentials_error
     return user
 

@@ -75,12 +75,14 @@ def test_register_persists_user_in_mongodb(client, database):
         "username": "Alice",
         "email": "alice@example.com",
         "role": "user",
+        "is_active": True,
     }
 
     stored_user = database.users.find_one({"email": "alice@example.com"})
     assert stored_user is not None
     assert stored_user["username"] == "Alice"
     assert stored_user["role"] == "user"
+    assert stored_user["is_active"] is True
     assert stored_user["hashed_password"] != "password123"
 
 
@@ -102,7 +104,11 @@ def test_login_rejects_invalid_credentials(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+        "details": None,
+    }
 
 
 def test_login_rejects_unknown_email(client, database):
@@ -112,7 +118,46 @@ def test_login_rejects_unknown_email(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+        "details": None,
+    }
+
+
+def test_inactive_user_cannot_login(client, database):
+    database.users.insert_one(
+        {
+            "username": "Inactive",
+            "email": "inactive@example.com",
+            "hashed_password": get_password_hash("password123"),
+            "role": "user",
+            "is_active": False,
+            "created_at": datetime.now(UTC),
+        }
+    )
+
+    login_response = client.post(
+        "/api/v1/users/login",
+        json={"email": "inactive@example.com", "password": "password123"},
+    )
+    token_response = client.post(
+        "/api/v1/users/token",
+        data={"username": "inactive@example.com", "password": "password123"},
+    )
+
+    assert login_response.status_code == 401
+    assert token_response.status_code == 401
+    assert login_response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+        "details": None,
+    }
+    assert token_response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Invalid email or password",
+        "details": None,
+    }
 
 
 def test_me_rejects_invalid_jwt(client, database):
@@ -122,7 +167,11 @@ def test_me_rejects_invalid_jwt(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+        "details": None,
+    }
 
 
 def test_me_rejects_expired_jwt(client, database):
@@ -141,14 +190,48 @@ def test_me_rejects_expired_jwt(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+        "details": None,
+    }
+
+
+def test_inactive_user_cannot_use_existing_token(client, database):
+    database.users.insert_one(
+        {
+            "username": "Inactive",
+            "email": "inactive@example.com",
+            "hashed_password": get_password_hash("password123"),
+            "role": "user",
+            "is_active": False,
+            "created_at": datetime.now(UTC),
+        }
+    )
+    token = create_access_token({"sub": "inactive@example.com"})
+
+    response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "code": "INVALID_CREDENTIALS",
+        "message": "Could not validate credentials",
+        "details": None,
+    }
 
 
 def test_me_requires_authorization_header(client, database):
     response = client.get("/api/v1/users/me")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    assert response.json() == {
+        "code": "AUTHENTICATION_REQUIRED",
+        "message": "Not authenticated",
+        "details": None,
+    }
 
 
 def test_login_and_me_use_persisted_user(client, database):
@@ -167,6 +250,7 @@ def test_login_and_me_use_persisted_user(client, database):
     assert login_response.status_code == 200
     assert profile_response.status_code == 200
     assert profile_response.json()["email"] == "alice@example.com"
+    assert profile_response.json()["is_active"] is True
 
 
 def test_admin_route_requires_superuser(client, database):
@@ -231,7 +315,11 @@ def test_admin_route_requires_authentication(client, database):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    assert response.json() == {
+        "code": "AUTHENTICATION_REQUIRED",
+        "message": "Not authenticated",
+        "details": None,
+    }
 
 
 def test_me_can_update_profile(client, database):
@@ -256,6 +344,7 @@ def test_me_can_update_profile(client, database):
         "username": "Alice Updated",
         "email": "alice@example.com",
         "role": "user",
+        "is_active": True,
     }
 
     database_user = database.users.find_one({"email": "alice@example.com"})
@@ -377,6 +466,16 @@ def test_admin_can_get_update_and_delete_user(client, database):
         headers=headers,
         json={"username": "Alice Updated"},
     )
+    deactivate_response = client.patch(
+        f"/api/v1/users/admin/users/{alice['_id']}",
+        headers=headers,
+        json={"is_active": False},
+    )
+    reactivate_response = client.patch(
+        f"/api/v1/users/admin/users/{alice['_id']}",
+        headers=headers,
+        json={"is_active": True},
+    )
     delete_response = client.delete(
         f"/api/v1/users/admin/users/{alice['_id']}", headers=headers
     )
@@ -385,6 +484,10 @@ def test_admin_can_get_update_and_delete_user(client, database):
     assert get_response.json()["id"] == str(alice["_id"])
     assert update_response.status_code == 200
     assert update_response.json()["username"] == "Alice Updated"
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+    assert reactivate_response.status_code == 200
+    assert reactivate_response.json()["is_active"] is True
     assert delete_response.status_code == 204
     assert database.users.find_one({"_id": alice["_id"]}) is None
 
