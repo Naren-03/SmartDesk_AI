@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from core.config import settings
 from core.errors import ErrorResponse, get_error_code
+from routes.api.v1.documents import router as document_router
 from routes.api.v1.users import router as user_router
 
 
@@ -54,6 +55,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(user_router, prefix="/api/v1/users")
+app.include_router(document_router, prefix="/api/v1/documents", tags=["Documents"])
 
 
 @app.get("/safe")

@@ -10,9 +10,9 @@ class DocumentResponse(BaseModel):
     title: str
     description: str | None = None
     owner_id: str
-    filename: str
-    content_type: str
-    size_bytes: int
+    filename: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None
     status: DocumentStatus
     created_at: datetime
     updated_at: datetime
