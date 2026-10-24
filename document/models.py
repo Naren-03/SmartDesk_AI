@@ -11,7 +11,7 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
 
 
-class DocumentMetadata(BaseModel): 
+class DocumentMetadata(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str | None = None
