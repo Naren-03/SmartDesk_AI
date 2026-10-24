@@ -1,15 +1,38 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from authentication.user.dependencies import get_current_user
 from core.pagination import Pagination
 from db.session import get_db
-from document.request import DocumentCreateRequest
+from document.request import DocumentCreateRequest, DocumentUpdateRequest
 from document.response import DocumentListResponse, DocumentResponse
 
 router = APIRouter()
+
+
+async def get_owned_document(
+    db: AsyncIOMotorDatabase,
+    document_id: str,
+    owner_id: str,
+) -> dict:
+    if not ObjectId.is_valid(document_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    document = await db.documents.find_one(
+        {"_id": ObjectId(document_id), "owner_id": owner_id}
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    return document
 
 
 def to_document_response(document: dict) -> DocumentResponse:
@@ -79,3 +102,53 @@ async def list_documents(
         page_size=pagination.page_size,
         pages=pages,
     )
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    document = await get_owned_document(
+        db, document_id, owner_id=str(current_user["_id"])
+    )
+    return to_document_response(document)
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: str,
+    document_update: DocumentUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    document = await get_owned_document(
+        db, document_id, owner_id=str(current_user["_id"])
+    )
+    update_data = document_update.model_dump(exclude_unset=True)
+    if "title" in update_data:
+        update_data["title"] = update_data["title"].strip()
+
+    if update_data:
+        update_data["updated_at"] = datetime.now(UTC)
+        await db.documents.update_one(
+            {"_id": document["_id"]},
+            {"$set": update_data},
+        )
+        document.update(update_data)
+
+    return to_document_response(document)
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    document = await get_owned_document(
+        db, document_id, owner_id=str(current_user["_id"])
+    )
+    await db.documents.delete_one({"_id": document["_id"]})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
