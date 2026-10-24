@@ -107,6 +107,7 @@ def test_login_rejects_invalid_credentials(client, database):
     assert response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Invalid email or password",
+        "details": None,
     }
 
 
@@ -120,6 +121,7 @@ def test_login_rejects_unknown_email(client, database):
     assert response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Invalid email or password",
+        "details": None,
     }
 
 
@@ -149,10 +151,12 @@ def test_inactive_user_cannot_login(client, database):
     assert login_response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Invalid email or password",
+        "details": None,
     }
     assert token_response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Invalid email or password",
+        "details": None,
     }
 
 
@@ -166,6 +170,7 @@ def test_me_rejects_invalid_jwt(client, database):
     assert response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Could not validate credentials",
+        "details": None,
     }
 
 
@@ -188,6 +193,7 @@ def test_me_rejects_expired_jwt(client, database):
     assert response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Could not validate credentials",
+        "details": None,
     }
 
 
@@ -213,6 +219,7 @@ def test_inactive_user_cannot_use_existing_token(client, database):
     assert response.json() == {
         "code": "INVALID_CREDENTIALS",
         "message": "Could not validate credentials",
+        "details": None,
     }
 
 
@@ -223,6 +230,7 @@ def test_me_requires_authorization_header(client, database):
     assert response.json() == {
         "code": "AUTHENTICATION_REQUIRED",
         "message": "Not authenticated",
+        "details": None,
     }
 
 
@@ -310,6 +318,7 @@ def test_admin_route_requires_authentication(client, database):
     assert response.json() == {
         "code": "AUTHENTICATION_REQUIRED",
         "message": "Not authenticated",
+        "details": None,
     }
 
 
