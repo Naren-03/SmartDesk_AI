@@ -10,3 +10,6 @@ wheels/
 .venv
 .vscode
 .env
+
+# Local document uploads
+storage/uploads/

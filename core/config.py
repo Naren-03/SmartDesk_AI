@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     secret_key: str = Field(min_length=32)
     algorithm: str = "HS256"
     token_expire_minutes: int = Field(default=30, gt=0)
+    storage_root: str = "storage/uploads"
+    max_upload_size_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
 
 
 settings = Settings()

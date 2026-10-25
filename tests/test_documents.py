@@ -1,6 +1,9 @@
 from datetime import UTC, datetime
+from hashlib import sha256
+from importlib import import_module
 
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError, ConnectionFailure, OperationFailure
@@ -10,6 +13,7 @@ from core.config import settings
 from document.request import DocumentCreateRequest, DocumentUpdateRequest
 from document.response import DocumentListResponse, DocumentResponse
 from main import app
+from storage.service import LocalStorageService
 
 
 @pytest.fixture()
@@ -57,6 +61,14 @@ def create_test_user(database, email: str):
 def auth_headers(email: str):
     token = create_access_token({"sub": email})
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def local_storage(tmp_path, monkeypatch):
+    document_routes = import_module("routes.api.v1.documents")
+    service = LocalStorageService(tmp_path, max_size_bytes=1024)
+    monkeypatch.setattr(document_routes, "storage", service)
+    return tmp_path
 
 
 def test_document_create_request_accepts_editable_metadata():
@@ -165,3 +177,40 @@ def test_document_endpoints_reject_invalid_id(client, database):
         "message": "Document not found",
         "details": None,
     }
+
+
+def test_upload_document_file_stores_metadata_and_deletes_file(
+    client, database, local_storage
+):
+    create_test_user(database, "alice@example.com")
+    headers = auth_headers("alice@example.com")
+    create_response = client.post(
+        "/api/v1/documents",
+        headers=headers,
+        json={"title": "Notes"},
+    )
+    document_id = create_response.json()["id"]
+    file_content = b"document contents"
+
+    upload_response = client.post(
+        f"/api/v1/documents/{document_id}/file",
+        headers=headers,
+        files={"upload": ("notes.txt", file_content, "text/plain")},
+    )
+
+    assert upload_response.status_code == 200
+    uploaded_document = upload_response.json()
+    assert uploaded_document["filename"] == "notes.txt"
+    assert uploaded_document["content_type"] == "text/plain"
+    assert uploaded_document["size_bytes"] == len(file_content)
+    assert uploaded_document["status"] == "uploaded"
+
+    stored_document = database.documents.find_one({"_id": ObjectId(document_id)})
+    assert stored_document["checksum_sha256"] == sha256(file_content).hexdigest()
+    stored_file = local_storage / stored_document["storage_key"]
+    assert stored_file.read_bytes() == file_content
+
+    delete_response = client.delete(f"/api/v1/documents/{document_id}", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert not stored_file.exists()

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class DocumentStatus(str, Enum):
     PENDING = "pending"
+    UPLOADED = "uploaded"
     PROCESSING = "processing"
     PROCESSED = "processed"
     FAILED = "failed"

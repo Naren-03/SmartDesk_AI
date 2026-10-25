@@ -1,16 +1,29 @@
 from datetime import UTC, datetime
+from typing import Annotated
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from authentication.user.dependencies import get_current_user
+from core.config import settings
 from core.pagination import Pagination
 from db.session import get_db
+from document.models import DocumentStatus
 from document.request import DocumentCreateRequest, DocumentUpdateRequest
 from document.response import DocumentListResponse, DocumentResponse
+from storage.service import LocalStorageService
 
 router = APIRouter()
+storage = LocalStorageService(settings.storage_root, settings.max_upload_size_bytes)
 
 
 async def get_owned_document(
@@ -68,7 +81,7 @@ async def create_document(
         "size_bytes": None,
         "storage_key": None,
         "checksum_sha256": None,
-        "status": "pending",
+        "status": DocumentStatus.PENDING.value,
         "created_at": now,
         "updated_at": now,
         "processed_at": None,
@@ -102,6 +115,34 @@ async def list_documents(
         page_size=pagination.page_size,
         pages=pages,
     )
+
+
+@router.post("/{document_id}/file", response_model=DocumentResponse)
+async def upload_document_file(
+    document_id: str,
+    upload: Annotated[UploadFile, File(...)],
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    document = await get_owned_document(
+        db, document_id, owner_id=str(current_user["_id"])
+    )
+    file_metadata = await storage.save_upload(
+        upload,
+        owner_id=document["owner_id"],
+        document_id=document_id,
+    )
+    update_data = {
+        **file_metadata,
+        "status": DocumentStatus.UPLOADED.value,
+        "updated_at": datetime.now(UTC),
+    }
+    await db.documents.update_one(
+        {"_id": document["_id"]},
+        {"$set": update_data},
+    )
+    document.update(update_data)
+    return to_document_response(document)
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -151,4 +192,5 @@ async def delete_document(
         db, document_id, owner_id=str(current_user["_id"])
     )
     await db.documents.delete_one({"_id": document["_id"]})
+    storage.delete(document.get("storage_key"))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
